@@ -1,0 +1,12 @@
+# render.yaml file - Yah file Render ko deployment ke instructions degi
+services:
+  - type: web
+    name: go-video-streamerw # Apne Web Service ka naam yahan likho
+    env: go
+    # FFmpeg install karne ke liye pre-deploy hook
+    # Debian/Ubuntu system par FFmpeg install karne ka tareeka
+    preBuild: |
+      sudo apt-get update && sudo apt-get install -y ffmpeg
+    # Yeh commands ab Render settings se aa rahe hain, par yahan bhi define kar do
+    buildCommand: go build -o server 
+    startCommand: ./server
