@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Go Video Uploader & Streamer</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        #output { border: 1px solid #ccc; padding: 10px; margin-top: 20px; white-space: pre-wrap; background-color: #f9f9f9; }
+        .success { color: green; font-weight: bold; }
+        .error { color: red; font-weight: bold; }
+        #videoPlayer { max-width: 100%; margin-top: 20px; display: none; }
+    </style>
+</head>
+<body>
+    <h1>Go Video Uploader & Streamer (Local Test)</h1>
+
+    <form id="uploadForm" enctype="multipart/form-data">
+        <input type="file" name="videoFile" accept="video/*" required>
+        <button type="submit">Upload & Encode</button>
+    </form>
+
+    <div id="status" class="success">Status: Ready to upload.</div>
+    <div id="output"></div>
+    
+    <video id="videoPlayer" controls autoplay></video>
+
+    <script>
+        const form = document.getElementById('uploadForm');
+        const statusDiv = document.getElementById('status');
+        const outputDiv = document.getElementById('output');
+        const videoPlayer = document.getElementById('videoPlayer');
+        const uploadURL = '/upload'; 
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            statusDiv.textContent = 'Status: Uploading and Encoding... Please wait.';
+            statusDiv.className = '';
+            outputDiv.textContent = 'Processing...';
+            videoPlayer.style.display = 'none'; // Hide player during upload
+
+            const formData = new FormData(form);
+            
+            try {
+                const response = await fetch(uploadURL, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.text();
+                
+                if (response.ok) {
+                    statusDiv.textContent = 'Status: SUCCESS! Encoding done.';
+                    statusDiv.className = 'success';
+                    outputDiv.textContent = result;
+                    
+                    // Extract Video ID 
+                    const idMatch = result.match(/ID for streaming: (\d+)/);
+                    if (idMatch && idMatch[1]) {
+                        const videoID = idMatch[1];
+                        const streamLink = `/stream/${videoID}`;
+                        
+                        // Show Stream Link and Auto-play Video
+                        outputDiv.innerHTML += `<br><br>Stream Link: <a href="${streamLink}" target="_blank">${streamLink}</a>`;
+                        
+                        videoPlayer.src = streamLink;
+                        videoPlayer.style.display = 'block';
+                        videoPlayer.load();
+
+                    }
+
+                } else {
+                    statusDiv.textContent = 'Status: FAILED! Check Render logs.';
+                    statusDiv.className = 'error';
+                    outputDiv.textContent = result;
+                }
+
+            } catch (error) {
+                statusDiv.textContent = 'Status: ERROR!';
+                statusDiv.className = 'error';
+                outputDiv.textContent = 'Network or Client Error: ' + error.message;
+            }
+        });
+    </script>
+</body>
+  </html>
