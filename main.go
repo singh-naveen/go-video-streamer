@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"strings" // Required for streamHandler
-	"strconv" // Required for parsing ID in streamHandler
+	"strings" 
+	"strconv" 
 	
 	_ "github.com/lib/pq" // PostgreSQL driver
 )
@@ -32,7 +32,7 @@ func init() {
 	}
 
 	// -------------------------------------------------------------
-	// 1. Automatic Table Creation Logic (To fix Shell access issues)
+	// 1. Automatic Table Creation Logic
 	// -------------------------------------------------------------
 	err = db.Ping()
 	if err != nil {
@@ -58,19 +58,18 @@ func init() {
 	log.Println("Database connection successful and 'videos' table ensured.")
 }
 
-// Handler for the root path and health check
+// -------------------------------------------------------------
+// 1. Handler for the root path (Serves the index.html file)
+// -------------------------------------------------------------
 func homeHandler(w http.ResponseWriter, r *http.Request) {
-	dbStatus := "Not Checked."
-	if db != nil {
-		err := db.Ping()
-		if err == nil {
-			dbStatus = "Connected."
-		} else {
-			dbStatus = fmt.Sprintf("Failed to connect: %v", err)
-		}
-	}
+    // Only handle requests to the exact root path
+    if r.URL.Path != "/" {
+        http.NotFound(w, r)
+        return
+    }
 
-	fmt.Fprintf(w, "Hello Naveen ji! Your Go Video Streamer server is running. Database Status: %s", dbStatus)
+	// Serve the index.html file (Jo hum abhi Codespace mein banayenge)
+    http.ServeFile(w, r, "index.html")
 }
 
 // -------------------------------------------------------------
@@ -108,13 +107,13 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Successfully uploaded temporary file: %s", tempFile.Name())
 
 	// 3. Define output path and encoding command (VP9)
-	outputFileName := fmt.Sprintf("encoded_%d.webm", os.Getpid()) // Use PID for unique name in /tmp
-	outputPath := "/tmp/" + outputFileName
+	outputFileName := fmt.Sprintf("encoded_%d.webm", os.Getpid())
+	outputPath := "/tmp/" + outputFileName // Storing the encoded file locally on Render
 
 	cmd := exec.Command("ffmpeg", 
 		"-i", tempFile.Name(), 
 		"-c:v", "libvpx-vp9", 
-		"-b:v", "1M",
+		"-b:v", "1M", // 1 Mbps bitrate
 		"-y", 
 		outputPath,
 	)
@@ -123,20 +122,20 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Printf("FFmpeg output: %s", string(output))
-		http.Error(w, "Video encoding failed. Is FFmpeg installed? "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Video encoding failed. Check FFmpeg installation/logs. Error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	
 	// 5. Success: Save metadata to database
 	var videoID int
 	if db != nil {
-		// Use QueryRow and Scan to get the new ID back
+		// Insert and get the new ID back
 		err = db.QueryRow("INSERT INTO videos (original_filename, encoded_path, status) VALUES ($1, $2, $3) RETURNING id", 
 			header.Filename, outputPath, "encoded").Scan(&videoID)
 		
 		if err != nil {
 			log.Printf("Database Insert Failed: %v", err)
-			http.Error(w, "Encoding successful, but DB save failed.", http.StatusInternalServerError)
+			http.Error(w, "Encoding successful, but DB save failed. File is still saved on disk.", http.StatusInternalServerError)
 			return
 		}
 	} else {
@@ -157,7 +156,6 @@ func splitPath(path string) []string {
 	if path == "" {
 		return nil
 	}
-	// Trim the leading slash and split
 	return strings.Split(strings.TrimPrefix(path, "/"), "/")
 }
 
@@ -165,13 +163,11 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 	// 1. Get video ID from the URL path (e.g., /stream/1)
 	parts := splitPath(r.URL.Path) 
     
-    // Check if parts has at least 3 elements (to get the ID: [ "stream", "1" ])
-    if len(parts) < 2 { // We only need "stream" and "1", so 2 elements
+    if len(parts) < 2 { 
         http.Error(w, "Video ID missing in URL.", http.StatusBadRequest)
         return
     }
 
-	// The ID is the last element
 	videoIDStr := parts[len(parts)-1]
 	videoID, err := strconv.Atoi(videoIDStr)
 
@@ -186,7 +182,7 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 		err := db.QueryRow("SELECT encoded_path FROM videos WHERE id = $1", videoID).Scan(&encodedPath)
 		if err != nil {
 			if err == sql.ErrNoRows {
-				http.Error(w, "Video not found.", http.StatusNotFound)
+				http.Error(w, "Video not found in database.", http.StatusNotFound)
 				return
 			}
 			log.Printf("DB Query Error: %v", err)
@@ -198,26 +194,24 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. Serve the file (Efficiently streams the content)
-	// Important: The Content-Type must be 'video/webm' for VP9 streams
+	// 3. Serve the file 
+	// The Content-Type must be 'video/webm' for the VP9 stream
 	w.Header().Set("Content-Type", "video/webm")
 	
-	// http.ServeFile handles range requests (which is crucial for streaming)
+	// http.ServeFile handles range requests (crucial for proper streaming/seeking)
 	http.ServeFile(w, r, encodedPath)
 }
 
 func main() {
-	// Root and health check handler
-	http.HandleFunc("/", homeHandler)
-	// Handler for video upload (POST)
-	http.HandleFunc("/upload", uploadHandler)
-	// Handler for video streaming (GET) - Trailing slash is important for routing /stream/1
-	http.HandleFunc("/stream/", streamHandler) 
+	// Register Handlers
+	http.HandleFunc("/", homeHandler)      // Serves index.html
+	http.HandleFunc("/upload", uploadHandler) // Handles POST upload
+	http.HandleFunc("/stream/", streamHandler) // Handles /stream/{id} GET request
 
-	// Get PORT from environment variable (set to 10000 on Render)
+	// Get PORT from environment variable (Render sets this)
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080" // Default port for local testing
+		port = "8080"
 	}
 
 	log.Printf("Server starting on port %s...", port)
