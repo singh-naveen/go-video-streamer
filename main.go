@@ -3,56 +3,129 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
+	"strconv"
 
-	_ "github.com/lib/pq" // PostgreSQL driver for database
+	_ "github.com/lib/pq"
 )
 
-func main() {
-	// DATABASE_URL environment variable se fetch karte hain
-	dbURL := os.Getenv("DATABASE_URL")
+// Global variables
+var db *sql.DB
 
-	// Database connection status check
-	dbStatus := "Not Checked"
-
-	if dbURL != "" {
-		// sql.Open se database handle milta hai
-		db, err := sql.Open("postgres", dbURL)
-		if err != nil {
-			log.Printf("Error connecting to database: %v", err)
-			dbStatus = fmt.Sprintf("Connection Failed: %v", err)
-		} else {
-			// Connection band karna zaroori hai
-			defer db.Close()
-
-			// Ping se check karte hain ki database se communication ho raha hai ya nahi
-			err = db.Ping()
-			if err != nil {
-				log.Printf("Error performing database ping: %v", err)
-				dbStatus = fmt.Sprintf("Ping Failed: %v", err)
-			} else {
-				log.Println("Successfully connected to the PostgreSQL database!")
-				dbStatus = "Connected"
-			}
-		}
-	} else {
-		log.Println("WARNING: DATABASE_URL is not set. Database check skipped.")
+func init() {
+	// Database connection logic (Pehle se hi set hai)
+	connStr := os.Getenv("DATABASE_URL")
+	if connStr == "" {
+		db = nil
+		return
 	}
 
-	// PORT environment variable set karte hain (Render 10000 use karta hai)
+	var err error
+	db, err = sql.Open("postgres", connStr)
+	if err != nil {
+		log.Fatalf("Error connecting to database: %v", err)
+	}
+}
+
+// Handler for the root path and health check
+func homeHandler(w http.ResponseWriter, r *http.Request) {
+	dbStatus := "Not Checked."
+	if db != nil {
+		// Ping the database to check connectivity
+		err := db.Ping()
+		if err == nil {
+			dbStatus = "Connected."
+		} else {
+			dbStatus = fmt.Sprintf("Failed to connect: %v", err)
+		}
+	}
+
+	fmt.Fprintf(w, "Hello Naveen! Your Go Video Streamer server is running. Database Status: %s", dbStatus)
+}
+
+// NEW: Handler to upload and encode video
+func uploadHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 1. Get the uploaded file
+	file, header, err := r.FormFile("videoFile")
+	if err != nil {
+		http.Error(w, "Error retrieving the file: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	// 2. Create a temporary file to save the uploaded video
+	tempFile, err := os.CreateTemp("", "upload-*.mp4")
+	if err != nil {
+		http.Error(w, "Error creating temporary file: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tempFile.Close()
+	defer os.Remove(tempFile.Name()) // Clean up the temp file
+
+	// Copy the uploaded file to the temporary storage
+	_, err = io.Copy(tempFile, file)
+	if err != nil {
+		http.Error(w, "Error saving file: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("Successfully uploaded temporary file: %s", tempFile.Name())
+
+	// 3. Define output path and encoding command (VP9)
+	outputFileName := "encoded_" + header.Filename + ".webm"
+	outputPath := "/tmp/" + outputFileName
+
+	// FFmpeg command to encode to VP9 (WebM format)
+	// -i: input file
+	// -c:v: video codec (libvpx-vp9)
+	// -b:v: bitrate (low quality for fast test)
+	// -y: overwrite output file if it exists
+	cmd := exec.Command("ffmpeg", 
+		"-i", tempFile.Name(), 
+		"-c:v", "libvpx-vp9", 
+		"-b:v", "1M",
+		"-y", 
+		outputPath,
+	)
+
+	// 4. Run the encoding command
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("FFmpeg output: %s", string(output))
+		http.Error(w, "Video encoding failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 5. Success response
+	fmt.Fprintf(w, "Successfully encoded video! Output saved to: %s (Size: %d bytes)", outputPath, header.Size)
+}
+
+func main() {
+	// Root and health check handler
+	http.HandleFunc("/", homeHandler)
+	// New handler for video upload
+	http.HandleFunc("/upload", uploadHandler)
+
+	// Get PORT from environment variable (set to 10000 on Render)
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080" // Local/Codespace testing ke liye
+		port = "8080" // Default port for local testing
 	}
 
-	// Basic Home route handler
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain") // Simple text response
-		fmt.Fprintf(w, "Hello Naveen! Your Go Video Streamer server is running.\nDatabase Status: %s.", dbStatus)
-	})
-
-	log.Printf("Server starting on port %s", port)
-	log.Fatal(http.ListenAndServe(":"+port, nil))
+	log.Printf("Server starting on port %s...", port)
+	err := http.ListenAndServe(":"+port, nil)
+	if err != nil {
+		log.Fatal("ListenAndServe: ", err)
+	}
 }
+
+// Note: Testing this needs a client (like Postman or a simple HTML form) 
+// to send a POST request with a file named 'videoFile'.
