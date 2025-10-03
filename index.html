@@ -1,85 +1,373 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Go Video Uploader & Streamer</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Uploader aur Metadata</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        #output { border: 1px solid #ccc; padding: 10px; margin-top: 20px; white-space: pre-wrap; background-color: #f9f9f9; }
-        .success { color: green; font-weight: bold; }
-        .error { color: red; font-weight: bold; }
-        #videoPlayer { max-width: 100%; margin-top: 20px; display: none; }
+        /* Custom scrollbar for Description box */
+        #description {
+            resize: none;
+            scrollbar-width: thin;
+            scrollbar-color: #4a5568 #2d3748;
+        }
+        /* Style for the keyword tag bubbles */
+        .keyword-tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            margin-right: 8px;
+            margin-bottom: 8px;
+            border-radius: 9999px;
+            background-color: #3b82f6; /* Blue-500 */
+            color: white;
+            font-size: 0.875rem;
+            cursor: default;
+        }
+        .keyword-tag button {
+            margin-left: 8px;
+            font-weight: bold;
+            opacity: 0.8;
+        }
     </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#3b82f6',
+                        'secondary': '#1e293b',
+                        'card': '#1f2937',
+                        'text-light': '#f3f4f6',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
 </head>
-<body>
-    <h1>Go Video Uploader & Streamer (Local Test)</h1>
+<body class="bg-gray-900 text-text-light min-h-screen font-sans">
+    <div class="max-w-4xl mx-auto p-4 md:p-8">
+        <h1 class="text-3xl md:text-4xl font-bold text-center mb-8 text-primary">Video Upload Manager</h1>
+        
+        <form id="uploadForm" class="space-y-6">
+            
+            <!-- 1. Video Upload/Drop Zone & Progress -->
+            <div id="dropZone" class="border-2 border-dashed border-gray-600 rounded-xl p-8 text-center cursor-pointer hover:border-primary transition duration-300 bg-card/50">
+                <input type="file" id="videoFile" name="file" accept="video/*" class="hidden">
+                <p id="dropZoneText" class="text-lg font-medium text-gray-400">Video Select karne ke liye <span class="text-primary">Click karein</span> ya Drag & Drop karein</p>
+                <p id="fileNameDisplay" class="mt-2 text-sm text-green-400 hidden">Selected: </p>
+            </div>
 
-    <form id="uploadForm" enctype="multipart/form-data">
-        <input type="file" name="videoFile" accept="video/*" required>
-        <button type="submit">Upload & Encode</button>
-    </form>
+            <!-- Progress Bar -->
+            <div id="progressContainer" class="hidden">
+                <div class="text-sm font-medium mb-1 flex justify-between">
+                    <span id="statusMessage">Upload ki taiyari...</span>
+                    <span id="uploadPercentage">0%</span>
+                </div>
+                <div class="w-full bg-secondary rounded-full h-2.5">
+                    <div id="progressBar" class="bg-primary h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+            </div>
 
-    <div id="status" class="success">Status: Ready to upload.</div>
-    <div id="output"></div>
-    
-    <video id="videoPlayer" controls autoplay></video>
+            <!-- 2. Metadata Section -->
+            <div class="bg-card p-6 rounded-xl shadow-lg space-y-6">
+                <h2 class="text-xl font-semibold border-b border-gray-700 pb-3">Video Details</h2>
+
+                <!-- Title -->
+                <div>
+                    <label for="title" class="block text-sm font-medium mb-2">Title (Max 100 characters)</label>
+                    <input type="text" id="title" name="title" maxlength="100" placeholder="Apne video ka aakarshak title daalein" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 focus:border-primary focus:ring-primary">
+                    <p id="titleCount" class="text-right text-xs text-gray-400 mt-1">0/100</p>
+                </div>
+
+                <!-- Description -->
+                <div>
+                    <label for="description" class="block text-sm font-medium mb-2">Description (Max 5000 words/characters)</label>
+                    <textarea id="description" name="description" maxlength="5000" rows="6" placeholder="Apne video ke baare mein vistar se bataayein" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 focus:border-primary focus:ring-primary"></textarea>
+                    <p id="descCount" class="text-right text-xs text-gray-400 mt-1">0/5000</p>
+                </div>
+
+                <!-- Keywords -->
+                <div>
+                    <label for="keywordInput" class="block text-sm font-medium mb-2">Keywords (Max 20 words, comma se alag karein)</label>
+                    <div id="keywordTags" class="flex flex-wrap mb-2 min-h-6">
+                        <!-- Keyword tags yahan aayenge -->
+                    </div>
+                    <input type="text" id="keywordInput" placeholder="technology, science, tutorial, video-streaming..." class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 focus:border-primary focus:ring-primary">
+                </div>
+
+                <!-- Privacy -->
+                <div>
+                    <label class="block text-sm font-medium mb-2">Privacy Settings</label>
+                    <div class="flex space-x-4">
+                        <button type="button" data-privacy="public" class="privacy-btn px-4 py-2 rounded-lg bg-primary text-white border-2 border-primary transition duration-150">Public</button>
+                        <button type="button" data-privacy="private" class="privacy-btn px-4 py-2 rounded-lg bg-gray-700 border-2 border-gray-700 hover:border-gray-500 transition duration-150">Private</button>
+                        <button type="button" data-privacy="unlisted" class="privacy-btn px-4 py-2 rounded-lg bg-gray-700 border-2 border-gray-700 hover:border-gray-500 transition duration-150">Unlisted</button>
+                    </div>
+                    <input type="hidden" id="privacy" name="privacy" value="public">
+                </div>
+            </div>
+
+            <!-- Submit Button -->
+            <button type="submit" id="submitBtn" class="w-full py-3 rounded-lg bg-gray-600 text-gray-400 font-semibold text-lg cursor-not-allowed transition duration-300" disabled>
+                Upload & Process Video
+            </button>
+        </form>
+
+        <!-- Server Response Area -->
+        <div id="responseArea" class="mt-8 p-4 bg-gray-800 rounded-lg hidden">
+            <h3 class="text-lg font-semibold mb-2 text-green-400">Server Response:</h3>
+            <pre id="responseText" class="text-sm whitespace-pre-wrap text-gray-300"></pre>
+        </div>
+    </div>
 
     <script>
-        const form = document.getElementById('uploadForm');
-        const statusDiv = document.getElementById('status');
-        const outputDiv = document.getElementById('output');
-        const videoPlayer = document.getElementById('videoPlayer');
-        const uploadURL = '/upload'; 
+        const fileInput = document.getElementById('videoFile');
+        const dropZone = document.getElementById('dropZone');
+        const fileNameDisplay = document.getElementById('fileNameDisplay');
+        const titleInput = document.getElementById('title');
+        const descInput = document.getElementById('description');
+        const keywordInput = document.getElementById('keywordInput');
+        const keywordTagsContainer = document.getElementById('keywordTags');
+        const privacyButtons = document.querySelectorAll('.privacy-btn');
+        const privacyHiddenInput = document.getElementById('privacy');
+        const submitBtn = document.getElementById('submitBtn');
+        const uploadForm = document.getElementById('uploadForm');
+        
+        const progressBar = document.getElementById('progressBar');
+        const uploadPercentage = document.getElementById('uploadPercentage');
+        const progressContainer = document.getElementById('progressContainer');
+        const statusMessage = document.getElementById('statusMessage');
+        const responseArea = document.getElementById('responseArea');
+        const responseText = document.getElementById('responseText');
 
-        form.addEventListener('submit', async (e) => {
+        let selectedFile = null;
+        let keywords = [];
+        const MAX_KEYWORDS = 20;
+
+        // --- File Selection Logic ---
+        
+        dropZone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', handleFileSelect);
+
+        // Drag and Drop Handlers
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.add('border-primary', 'bg-card/75'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.remove('border-primary', 'bg-card/75'), false);
+        });
+
+        dropZone.addEventListener('drop', handleDrop, false);
+
+        function preventDefaults(e) {
             e.preventDefault();
-            
-            statusDiv.textContent = 'Status: Uploading and Encoding... Please wait.';
-            statusDiv.className = '';
-            outputDiv.textContent = 'Processing...';
-            videoPlayer.style.display = 'none'; // Hide player during upload
+            e.stopPropagation();
+        }
 
-            const formData = new FormData(form);
-            
-            try {
-                const response = await fetch(uploadURL, {
-                    method: 'POST',
-                    body: formData
-                });
+        function handleDrop(e) {
+            let dt = e.dataTransfer;
+            let files = dt.files;
+            if (files.length > 0) {
+                fileInput.files = files; // Set files to the input element
+                handleFileSelect();
+            }
+        }
 
-                const result = await response.text();
+        function handleFileSelect() {
+            selectedFile = fileInput.files[0];
+            if (selectedFile) {
+                fileNameDisplay.textContent = `Selected: ${selectedFile.name} (${(selectedFile.size / 1024 / 1024).toFixed(2)} MB)`;
+                fileNameDisplay.classList.remove('hidden');
                 
-                if (response.ok) {
-                    statusDiv.textContent = 'Status: SUCCESS! Encoding done.';
-                    statusDiv.className = 'success';
-                    outputDiv.textContent = result;
-                    
-                    // Extract Video ID 
-                    const idMatch = result.match(/ID for streaming: (\d+)/);
-                    if (idMatch && idMatch[1]) {
-                        const videoID = idMatch[1];
-                        const streamLink = `/stream/${videoID}`;
-                        
-                        // Show Stream Link and Auto-play Video
-                        outputDiv.innerHTML += `<br><br>Stream Link: <a href="${streamLink}" target="_blank">${streamLink}</a>`;
-                        
-                        videoPlayer.src = streamLink;
-                        videoPlayer.style.display = 'block';
-                        videoPlayer.load();
-
-                    }
-
-                } else {
-                    statusDiv.textContent = 'Status: FAILED! Check Render logs.';
-                    statusDiv.className = 'error';
-                    outputDiv.textContent = result;
+                // Auto-fill Title if empty
+                if (titleInput.value.trim() === '') {
+                    // Remove file extension for cleaner title
+                    const cleanName = selectedFile.name.replace(/\.[^/.]+$/, ""); 
+                    titleInput.value = cleanName.substring(0, 100);
                 }
+                checkFormValidity();
+            }
+        }
 
-            } catch (error) {
-                statusDiv.textContent = 'Status: ERROR!';
-                statusDiv.className = 'error';
-                outputDiv.textContent = 'Network or Client Error: ' + error.message;
+        // --- Metadata & Validation Logic ---
+
+        // 1. Character Counters
+        titleInput.addEventListener('input', () => {
+            document.getElementById('titleCount').textContent = `${titleInput.value.length}/100`;
+            checkFormValidity();
+        });
+        descInput.addEventListener('input', () => {
+            document.getElementById('descCount').textContent = `${descInput.value.length}/5000`;
+            checkFormValidity();
+        });
+
+        // 2. Keyword Tagging
+        keywordInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ',') {
+                e.preventDefault();
+                addKeyword(keywordInput.value.trim().replace(/,/g, ''));
+                keywordInput.value = '';
             }
         });
+
+        function addKeyword(text) {
+            if (text && keywords.length < MAX_KEYWORDS && !keywords.includes(text)) {
+                keywords.push(text);
+                renderKeywords();
+            }
+        }
+
+        function removeKeyword(index) {
+            keywords.splice(index, 1);
+            renderKeywords();
+        }
+
+        function renderKeywords() {
+            keywordTagsContainer.innerHTML = '';
+            keywords.forEach((keyword, index) => {
+                const tag = document.createElement('span');
+                tag.className = 'keyword-tag';
+                tag.innerHTML = `${keyword} <button type="button" class="remove-keyword" data-index="${index}">x</button>`;
+                keywordTagsContainer.appendChild(tag);
+            });
+            checkFormValidity();
+        }
+
+        keywordTagsContainer.addEventListener('click', (e) => {
+            if (e.target.classList.contains('remove-keyword')) {
+                const index = e.target.getAttribute('data-index');
+                removeKeyword(parseInt(index));
+            }
+        });
+
+        // 3. Privacy Button Logic
+        privacyButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                privacyButtons.forEach(btn => {
+                    btn.classList.remove('bg-primary', 'border-primary', 'text-white');
+                    btn.classList.add('bg-gray-700', 'border-gray-700', 'hover:border-gray-500');
+                });
+                button.classList.add('bg-primary', 'border-primary', 'text-white');
+                button.classList.remove('bg-gray-700', 'border-gray-700', 'hover:border-gray-500');
+                privacyHiddenInput.value = button.getAttribute('data-privacy');
+            });
+        });
+
+        // 4. Submit Button Activation Check
+        function checkFormValidity() {
+            const isFileSelected = selectedFile !== null;
+            const isTitleValid = titleInput.value.trim().length > 0 && titleInput.value.length <= 100;
+            const isDescValid = descInput.value.trim().length > 0 && descInput.value.length <= 5000;
+            const isKeywordValid = keywords.length <= MAX_KEYWORDS;
+
+            const isValid = isFileSelected && isTitleValid && isDescValid && isKeywordValid;
+
+            if (isValid) {
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('bg-gray-600', 'text-gray-400', 'cursor-not-allowed');
+                submitBtn.classList.add('bg-primary', 'text-white', 'hover:bg-blue-700', 'shadow-md', 'shadow-primary/50');
+            } else {
+                submitBtn.disabled = true;
+                submitBtn.classList.add('bg-gray-600', 'text-gray-400', 'cursor-not-allowed');
+                submitBtn.classList.remove('bg-primary', 'text-white', 'hover:bg-blue-700', 'shadow-md', 'shadow-primary/50');
+            }
+        }
+        
+        // --- AJAX Upload & Progress Logic ---
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (submitBtn.disabled) return;
+
+            responseArea.classList.add('hidden');
+            progressContainer.classList.remove('hidden');
+            submitBtn.disabled = true; // Disable during upload
+
+            const formData = new FormData(uploadForm);
+            // Append the actual keyword string
+            formData.append('keywords', keywords.join(', ')); 
+            
+            // Note: The 'file', 'title', 'description', and 'privacy' fields are already in the formData.
+
+            try {
+                // Use XMLHttpRequest for progress tracking (Fetch API doesn't support easy upload progress)
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', '/upload', true); // Use your existing '/upload' handler
+
+                // Progress event handler (Upload Percentage)
+                xhr.upload.addEventListener('progress', (e) => {
+                    if (e.lengthComputable) {
+                        const percent = Math.round((e.loaded / e.total) * 100);
+                        progressBar.style.width = percent + '%';
+                        uploadPercentage.textContent = percent + '%';
+                        statusMessage.textContent = 'Upload Ho raha hai...';
+                    }
+                });
+
+                // Load event handler (After Upload, Server Processing)
+                xhr.addEventListener('load', () => {
+                    const response = xhr.responseText;
+                    
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        // Success: The status message will now reflect ENCODING
+                        statusMessage.textContent = 'Upload Complete. Video Encode Ho raha hai... (Server par FFmpeg)';
+                        uploadPercentage.textContent = '100%';
+                        progressBar.style.width = '100%';
+                        
+                        // Show server response (Encoding result, stream link, etc.)
+                        responseText.textContent = response;
+                        responseArea.classList.remove('hidden');
+
+                    } else {
+                        // Error
+                        statusMessage.textContent = 'Error: Upload ya Encoding Fail ho gaya.';
+                        responseText.textContent = `Status: ${xhr.status}\nResponse: ${response}`;
+                        responseArea.classList.remove('hidden');
+                        progressBar.style.width = '100%';
+                        progressBar.classList.add('bg-red-500'); // Red bar for error
+                    }
+                    submitBtn.disabled = false;
+                    checkFormValidity();
+                });
+
+                // Error event handler
+                xhr.addEventListener('error', () => {
+                    statusMessage.textContent = 'Network Error: Server tak pahunch nahi paya.';
+                    progressBar.style.width = '100%';
+                    progressBar.classList.add('bg-red-500');
+                    submitBtn.disabled = false;
+                    checkFormValidity();
+                });
+
+                xhr.send(formData);
+
+            } catch (error) {
+                console.error('Submission error:', error);
+                statusMessage.textContent = 'Critical Error. Console check karein.';
+                submitBtn.disabled = false;
+                checkFormValidity();
+            }
+        });
+
+        // Initial checks
+        window.onload = () => {
+            // Apply initial count to fields
+            document.getElementById('titleCount').textContent = `${titleInput.value.length}/100`;
+            document.getElementById('descCount').textContent = `${descInput.value.length}/5000`;
+            checkFormValidity();
+        }
     </script>
 </body>
-  </html>
+    </html>
+    
