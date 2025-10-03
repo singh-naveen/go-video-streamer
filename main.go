@@ -44,7 +44,7 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	fmt.Fprintf(w, "Hello Naveen! Your Go Video Streamer server is running. Database Status: %s", dbStatus)
+	fmt.Fprintf(w, "Hello Naveen ji ! Your Go Video Streamer server is running. Database Status: %s", dbStatus)
 }
 
 // NEW: Handler to upload and encode video
