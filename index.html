@@ -3,17 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Uploader aur Metadata</title>
-    <!-- Tailwind CSS CDN -->
+    <title>Polished Video Uploader</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Custom scrollbar for Description box */
         #description {
             resize: none;
             scrollbar-width: thin;
             scrollbar-color: #4a5568 #2d3748;
         }
-        /* Style for the keyword tag bubbles */
         .keyword-tag {
             display: inline-flex;
             align-items: center;
@@ -21,7 +18,7 @@
             margin-right: 8px;
             margin-bottom: 8px;
             border-radius: 9999px;
-            background-color: #3b82f6; /* Blue-500 */
+            background-color: #3b82f6;
             color: white;
             font-size: 0.875rem;
             cursor: default;
@@ -56,14 +53,12 @@
         
         <form id="uploadForm" class="space-y-6">
             
-            <!-- 1. Video Upload/Drop Zone & Progress -->
             <div id="dropZone" class="border-2 border-dashed border-gray-600 rounded-xl p-8 text-center cursor-pointer hover:border-primary transition duration-300 bg-card/50">
                 <input type="file" id="videoFile" name="file" accept="video/*" class="hidden">
                 <p id="dropZoneText" class="text-lg font-medium text-gray-400">Video Select karne ke liye <span class="text-primary">Click karein</span> ya Drag & Drop karein</p>
                 <p id="fileNameDisplay" class="mt-2 text-sm text-green-400 hidden">Selected: </p>
             </div>
 
-            <!-- Progress Bar -->
             <div id="progressContainer" class="hidden">
                 <div class="text-sm font-medium mb-1 flex justify-between">
                     <span id="statusMessage">Upload ki taiyari...</span>
@@ -74,34 +69,31 @@
                 </div>
             </div>
 
-            <!-- 2. Metadata Section -->
             <div class="bg-card p-6 rounded-xl shadow-lg space-y-6">
                 <h2 class="text-xl font-semibold border-b border-gray-700 pb-3">Video Details</h2>
 
-                <!-- Title -->
                 <div>
                     <label for="title" class="block text-sm font-medium mb-2">Title (Max 100 characters)</label>
                     <input type="text" id="title" name="title" maxlength="100" placeholder="Apne video ka aakarshak title daalein" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 focus:border-primary focus:ring-primary">
                     <p id="titleCount" class="text-right text-xs text-gray-400 mt-1">0/100</p>
+                    <p id="titleError" class="text-sm text-red-500 hidden">Title zaroori hai.</p>
                 </div>
 
-                <!-- Description -->
                 <div>
-                    <label for="description" class="block text-sm font-medium mb-2">Description (Max 5000 words/characters)</label>
+                    <label for="description" class="block text-sm font-medium mb-2">Description (Max 5000 characters)</label>
                     <textarea id="description" name="description" maxlength="5000" rows="6" placeholder="Apne video ke baare mein vistar se bataayein" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 focus:border-primary focus:ring-primary"></textarea>
                     <p id="descCount" class="text-right text-xs text-gray-400 mt-1">0/5000</p>
+                    <p id="descError" class="text-sm text-red-500 hidden">Description zaroori hai.</p>
                 </div>
 
-                <!-- Keywords -->
                 <div>
                     <label for="keywordInput" class="block text-sm font-medium mb-2">Keywords (Max 20 words, comma se alag karein)</label>
                     <div id="keywordTags" class="flex flex-wrap mb-2 min-h-6">
-                        <!-- Keyword tags yahan aayenge -->
-                    </div>
+                        </div>
                     <input type="text" id="keywordInput" placeholder="technology, science, tutorial, video-streaming..." class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 focus:border-primary focus:ring-primary">
+                    <p id="keywordLimit" class="text-right text-xs text-gray-400 mt-1">0/20 Keywords</p>
                 </div>
 
-                <!-- Privacy -->
                 <div>
                     <label class="block text-sm font-medium mb-2">Privacy Settings</label>
                     <div class="flex space-x-4">
@@ -113,16 +105,15 @@
                 </div>
             </div>
 
-            <!-- Submit Button -->
             <button type="submit" id="submitBtn" class="w-full py-3 rounded-lg bg-gray-600 text-gray-400 font-semibold text-lg cursor-not-allowed transition duration-300" disabled>
                 Upload & Process Video
             </button>
         </form>
 
-        <!-- Server Response Area -->
         <div id="responseArea" class="mt-8 p-4 bg-gray-800 rounded-lg hidden">
             <h3 class="text-lg font-semibold mb-2 text-green-400">Server Response:</h3>
             <pre id="responseText" class="text-sm whitespace-pre-wrap text-gray-300"></pre>
+            <p id="streamLinkDisplay" class="mt-4 text-sm font-medium">Stream Link: <a href="#" id="streamLinkAnchor" class="text-primary hover:text-blue-400 hidden" target="_blank"></a></p>
         </div>
     </div>
 
@@ -145,6 +136,7 @@
         const statusMessage = document.getElementById('statusMessage');
         const responseArea = document.getElementById('responseArea');
         const responseText = document.getElementById('responseText');
+        const streamLinkAnchor = document.getElementById('streamLinkAnchor');
 
         let selectedFile = null;
         let keywords = [];
@@ -242,6 +234,7 @@
                 tag.innerHTML = `${keyword} <button type="button" class="remove-keyword" data-index="${index}">x</button>`;
                 keywordTagsContainer.appendChild(tag);
             });
+            document.getElementById('keywordLimit').textContent = `${keywords.length}/${MAX_KEYWORDS} Keywords`;
             checkFormValidity();
         }
 
@@ -262,6 +255,7 @@
                 button.classList.add('bg-primary', 'border-primary', 'text-white');
                 button.classList.remove('bg-gray-700', 'border-gray-700', 'hover:border-gray-500');
                 privacyHiddenInput.value = button.getAttribute('data-privacy');
+                checkFormValidity();
             });
         });
 
@@ -271,7 +265,11 @@
             const isTitleValid = titleInput.value.trim().length > 0 && titleInput.value.length <= 100;
             const isDescValid = descInput.value.trim().length > 0 && descInput.value.length <= 5000;
             const isKeywordValid = keywords.length <= MAX_KEYWORDS;
-
+            
+            // Show/Hide Errors
+            document.getElementById('titleError').classList.toggle('hidden', isTitleValid);
+            document.getElementById('descError').classList.toggle('hidden', isDescValid);
+            
             const isValid = isFileSelected && isTitleValid && isDescValid && isKeywordValid;
 
             if (isValid) {
@@ -285,6 +283,10 @@
             }
         }
         
+        // Add event listeners for input validation
+        titleInput.addEventListener('input', checkFormValidity);
+        descInput.addEventListener('input', checkFormValidity);
+        
         // --- AJAX Upload & Progress Logic ---
         uploadForm.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -292,25 +294,27 @@
 
             responseArea.classList.add('hidden');
             progressContainer.classList.remove('hidden');
+            progressBar.classList.remove('bg-red-500'); // Reset color
             submitBtn.disabled = true; // Disable during upload
+            submitBtn.classList.add('bg-gray-600', 'text-gray-400');
 
-            const formData = new FormData(uploadForm);
-            // Append the actual keyword string
-            formData.append('keywords', keywords.join(', ')); 
+            const formData = new FormData();
+            formData.append('file', selectedFile); 
+            formData.append('title', titleInput.value.trim());
+            formData.append('description', descInput.value.trim());
+            formData.append('privacy', privacyHiddenInput.value);
+            formData.append('keywords', keywords.join(', '));
             
-            // Note: The 'file', 'title', 'description', and 'privacy' fields are already in the formData.
-
             try {
-                // Use XMLHttpRequest for progress tracking (Fetch API doesn't support easy upload progress)
                 const xhr = new XMLHttpRequest();
-                xhr.open('POST', '/upload', true); // Use your existing '/upload' handler
+                xhr.open('POST', '/upload', true);
 
                 // Progress event handler (Upload Percentage)
                 xhr.upload.addEventListener('progress', (e) => {
                     if (e.lengthComputable) {
                         const percent = Math.round((e.loaded / e.total) * 100);
                         progressBar.style.width = percent + '%';
-                        uploadPercentage.textContent = percent + '%';
+                        uploadPercentage.textContent = percent + '% (Uploading)';
                         statusMessage.textContent = 'Upload Ho raha hai...';
                     }
                 });
@@ -322,11 +326,19 @@
                     if (xhr.status >= 200 && xhr.status < 300) {
                         // Success: The status message will now reflect ENCODING
                         statusMessage.textContent = 'Upload Complete. Video Encode Ho raha hai... (Server par FFmpeg)';
-                        uploadPercentage.textContent = '100%';
-                        progressBar.style.width = '100%';
+                        uploadPercentage.textContent = '100% (Processing)';
                         
-                        // Show server response (Encoding result, stream link, etc.)
-                        responseText.textContent = response;
+                        try {
+                            const jsonResponse = JSON.parse(response);
+                            responseText.textContent = JSON.stringify(jsonResponse, null, 2);
+                            streamLinkAnchor.href = jsonResponse.stream_link;
+                            streamLinkAnchor.textContent = jsonResponse.stream_link;
+                            streamLinkAnchor.classList.remove('hidden');
+                        } catch (e) {
+                            responseText.textContent = response;
+                            streamLinkAnchor.classList.add('hidden');
+                        }
+
                         responseArea.classList.remove('hidden');
 
                     } else {
@@ -362,7 +374,6 @@
 
         // Initial checks
         window.onload = () => {
-            // Apply initial count to fields
             document.getElementById('titleCount').textContent = `${titleInput.value.length}/100`;
             document.getElementById('descCount').textContent = `${descInput.value.length}/5000`;
             checkFormValidity();
@@ -370,4 +381,3 @@
     </script>
 </body>
     </html>
-    
